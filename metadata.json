@@ -1,0 +1,5 @@
+{
+  "name": "AeroExpress",
+  "description": "Um simulador de voo arcade em mundo aberto. Pilote seu avião, navegue por céus infinitos e entregue passageiros em cidades a diferentes distâncias (1km a 35km).",
+  "requestFramePermissions": []
+}
