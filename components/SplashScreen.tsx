@@ -90,7 +90,7 @@ export const SplashScreen = () => {
                     <span className="text-green-400">SYSTEM READY</span>
                 )}
             </span>
-            <span className="text-slate-600">{bootStep > 0 && "v1.0.5-fix"}</span>
+            <span className="text-slate-600">{bootStep > 0 && "v1.1.0 (Z-Fighting Fix)"}</span>
         </div>
 
         {/* System Checks Visualization */}

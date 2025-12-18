@@ -169,16 +169,20 @@ export const Plane = () => {
 
     // Mission Check with Euclidean Distance
     if (currentMission) {
-      const targetZ = -currentMission.distanceKm * 1000;
+      const RUNWAY_OFFSET_Z = 800; // Pista de pouso está deslocada 800 unidades no eixo Z relativo à ilha
+      
+      const targetIslandZ = -currentMission.distanceKm * 1000;
+      const targetRunwayZ = targetIslandZ + RUNWAY_OFFSET_Z; // Coordenada Z real da pista
       const targetX = currentMission.targetOffsetX || 0;
       
       // Calculate 3D distance ignoring much of Y
       const dx = position.current.x - targetX;
-      const dz = position.current.z - targetZ;
+      const dz = position.current.z - targetRunwayZ;
       const distance = Math.sqrt(dx*dx + dz*dz);
 
       setDistanceToTarget(Math.round(distance / 10));
 
+      // Sucesso se parar PERTO da pista (raio 300)
       if (distance < 300 && isGrounded.current && currentSpeed.current < 0.1) {
         setGameState('SUCCESS');
       }

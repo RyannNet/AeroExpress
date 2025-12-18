@@ -1,53 +1,68 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { useGameStore } from '../store';
-import { Vector3, Color } from 'three';
-import { Text, Instance, Instances } from '@react-three/drei';
+import { Vector3, Color, RepeatWrapping, TextureLoader } from 'three';
+import { Text, useTexture } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 
 // --- CONFIGURAÇÃO VISUAL ---
 const COLORS = {
-    water: "#29b6f6", // Azul caribe
-    sand: "#f6e0b5",  // Areia clara
-    grass: "#66bb6a", // Verde vibrante
-    rock: "#78909c",  // Cinza azulado
+    water: "#006994", // Azul oceano profundo
+    sand: "#e6c288",  // Areia mais vibrante
+    rock: "#78909c",
     snow: "#ffffff",
-    asphalt: "#37474f",
     markings: "#eceff1"
 };
 
 export const World = () => {
   const { currentMission } = useGameStore();
 
+  // --- CARREGAMENTO DE TEXTURAS ---
+  // Usando texturas CC0 placeholder confiáveis
+  const textures = useTexture({
+      grass: 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/terrain/grasslight-big.jpg',
+      waterNormal: 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water/Water_1_M_Normal.jpg',
+      asphalt: 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/uv_grid_opengl.jpg', 
+  });
+
+  // Configuração de repetição das texturas
+  useMemo(() => {
+      textures.grass.wrapS = textures.grass.wrapT = RepeatWrapping;
+      textures.grass.repeat.set(50, 50);
+
+      textures.waterNormal.wrapS = textures.waterNormal.wrapT = RepeatWrapping;
+      textures.waterNormal.repeat.set(20, 20);
+      
+      textures.asphalt.wrapS = textures.asphalt.wrapT = RepeatWrapping;
+      textures.asphalt.repeat.set(1, 20);
+  }, [textures]);
+
+  // Animação da Água
+  useFrame((state, delta) => {
+      textures.waterNormal.offset.x += delta * 0.05;
+      textures.waterNormal.offset.y += delta * 0.05;
+  });
+
   // Coordenadas do destino
   const targetZ = currentMission ? -currentMission.distanceKm * 1000 : -10000;
   const targetX = currentMission?.targetOffsetX || 0;
 
-  // Gerar cenário proceduralmente baseado na semente da missão (ou aleatório se sem missão)
-  // Usamos useMemo para não recalcular a cada frame, apenas quando a missão muda
+  // Gerar cenário proceduralmente
   const scenery = useMemo(() => {
       const islands: any[] = [];
       const clouds: any[] = [];
       
-      // 1. ILHAS NO CAMINHO (Arquipélago)
-      // Gerar ilhas a cada ~1000m a ~2000m ao longo do caminho até o destino
       const distance = Math.abs(targetZ);
       const numIslands = Math.floor(distance / 1500) + 5; 
 
       for (let i = 0; i < numIslands; i++) {
-          // Progresso de 0 a 1 do caminho
           const t = i / numIslands;
-          
-          // Posição base interpolada entre HQ (0,0,0) e Destino (targetX, 0, targetZ)
           const baseX = t * targetX;
           const baseZ = t * targetZ;
-
-          // Adicionar "jitter" (desvio aleatório) para não ficar uma linha reta de ilhas
-          // Quanto mais longe, maior a dispersão lateral
           const spread = 2000; 
           const posX = baseX + (Math.random() - 0.5) * spread;
           const posZ = baseZ + (Math.random() - 0.5) * spread;
 
-          // Não colocar ilha muito perto do HQ (0,0) nem do destino exato agora
           if (Math.abs(posZ) < 1000 || Math.abs(posZ - targetZ) < 500) continue;
 
           const type = Math.random() > 0.7 ? 'volcano' : 'flat';
@@ -56,13 +71,11 @@ export const World = () => {
           islands.push({ x: posX, z: posZ, scale, type });
       }
 
-      // 2. NUVENS
-      // Espalhar nuvens em altitudes variadas
       const numClouds = 100;
       for (let i = 0; i < numClouds; i++) {
-           const cx = (Math.random() - 0.5) * 6000 + (targetX / 2); // Espalha ao redor da rota média
-           const cz = (Math.random() * targetZ * 1.2) + 1000; // Do início até além do destino
-           const cy = 200 + Math.random() * 400; // Altitude 200ft a 600ft
+           const cx = (Math.random() - 0.5) * 6000 + (targetX / 2); 
+           const cz = (Math.random() * targetZ * 1.2) + 1000; 
+           const cy = 200 + Math.random() * 400; 
            const scale = 20 + Math.random() * 40;
            clouds.push({ x: cx, y: cy, z: cz, scale });
       }
@@ -72,43 +85,48 @@ export const World = () => {
 
   return (
     <group>
-      {/* --- OCEANO INFINITO --- */}
+      {/* --- OCEANO INFINITO (COM TEXTURA) --- */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -5, 0]} receiveShadow>
         <planeGeometry args={[100000, 100000]} />
-        <meshStandardMaterial color={COLORS.water} roughness={0.2} metalness={0.1} />
+        <meshStandardMaterial 
+            color={COLORS.water} 
+            normalMap={textures.waterNormal} 
+            normalScale={new Vector3(1, 1, 1)}
+            roughness={0} 
+            metalness={0.8} 
+        />
       </mesh>
 
       {/* --- ILHA INICIAL (HQ) --- */}
-      <group position={[0, -4, -200]}> {/* Centralizada na pista */}
+      <group position={[0, -4, -200]}> 
           {/* Base Areia */}
           <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0, 0]} receiveShadow>
               <circleGeometry args={[900, 32]} />
               <meshStandardMaterial color={COLORS.sand} roughness={1} />
           </mesh>
-          {/* Base Grama */}
+          {/* Base Grama (Texturizada) */}
           <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.5, 0]} receiveShadow>
               <circleGeometry args={[800, 32]} />
-              <meshStandardMaterial color={COLORS.grass} roughness={1} />
+              <meshStandardMaterial map={textures.grass} roughness={0.8} />
           </mesh>
           
-          {/* Vegetação do HQ */}
           <Trees count={50} area={700} offsetZ={0} />
-          
-          {/* Montanhas decorativas ao fundo do aeroporto */}
           <Mountain position={[600, 0, -500]} scale={200} />
           <Mountain position={[-500, 0, -700]} scale={150} />
 
-          {/* Aeroporto HQ */}
-          <Runway />
+          {/* Pista elevada para não bugar com o chão (y=0.6 > y=0.5 da grama) */}
+          <group position={[0, 0.6, 0]}>
+            <Runway />
+          </group>
       </group>
 
-      {/* --- ILHAS PROCEDURAIS (O CAMINHO) --- */}
+      {/* --- ILHAS PROCEDURAIS --- */}
       {scenery.islands.map((island, i) => (
           <group key={`isl-${i}`} position={[island.x, -4, island.z]}>
               {island.type === 'volcano' ? (
                   <VolcanicIsland scale={island.scale} />
               ) : (
-                  <FlatIsland scale={island.scale} />
+                  <FlatIsland scale={island.scale} grassTexture={textures.grass} />
               )}
           </group>
       ))}
@@ -121,39 +139,28 @@ export const World = () => {
       {/* --- ILHA DE DESTINO --- */}
       {currentMission && (
         <group position={[targetX, -4, targetZ]}>
-          {/* Base da Ilha da Cidade */}
           <mesh rotation={[-Math.PI/2, 0, 0]} receiveShadow>
               <circleGeometry args={[1200, 64]} />
               <meshStandardMaterial color={COLORS.sand} />
           </mesh>
           <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 1, 0]} receiveShadow>
               <circleGeometry args={[1100, 64]} />
-              <meshStandardMaterial color="#8d6e63" /> {/* Terra mais escura/urbana */}
+              {/* Chão da cidade */}
+              <meshStandardMaterial color="#5d4037" roughness={0.9} />
           </mesh>
 
-          {/* Cidade */}
           <CityCenter />
 
-          {/* Pista de Pouso do Destino */}
+          {/* Pista elevada sobre o terreno da cidade (y=2 é mais alto que y=1 da base da cidade) */}
           <group position={[0, 2, 800]} rotation={[0, Math.PI, 0]}> 
                <Runway simple />
           </group>
 
-          {/* Label Flutuante */}
-           <Text
-            position={[0, 400, 0]}
-            color="white"
-            fontSize={80}
-            anchorX="center"
-            anchorY="middle"
-            outlineWidth={2}
-            outlineColor="#000"
-          >
+           <Text position={[0, 400, 800]} color="white" fontSize={80} anchorX="center" anchorY="middle" outlineWidth={2} outlineColor="#000">
             {currentMission.destinationName}
           </Text>
           
-          {/* Marcador de Anéis */}
-          <mesh position={[0, 150, 0]}>
+          <mesh position={[0, 150, 800]}>
              <torusGeometry args={[80, 5, 16, 100]} />
              <meshBasicMaterial color="#ffff00" />
              <GlowingRing color="#ffff00" />
@@ -167,19 +174,32 @@ export const World = () => {
 // --- COMPONENTES DE CENÁRIO ---
 
 const Runway = ({ simple = false }) => (
-    <group position={[0, 0.2, 0]}>
-        {/* Asfalto */}
+    <group position={[0, 0, 0]}>
+        {/* Asfalto Escuro */}
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
             <planeGeometry args={[60, 1500]} />
-            <meshStandardMaterial color={COLORS.asphalt} />
+            <meshStandardMaterial 
+                color="#263238" 
+                roughness={0.6} 
+                metalness={0.1} 
+                // Polygon Offset evita z-fighting com o chão logo abaixo
+                polygonOffset={true}
+                polygonOffsetFactor={-1} 
+            />
         </mesh>
         {/* Marcações */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
             <planeGeometry args={[2, 1200]} />
-            <meshStandardMaterial color={COLORS.markings} />
+            <meshStandardMaterial 
+                color={COLORS.markings} 
+                emissive={COLORS.markings} 
+                emissiveIntensity={0.5} 
+                // Garante que a marcação fique sobre o asfalto
+                polygonOffset={true}
+                polygonOffsetFactor={-2}
+            />
         </mesh>
         
-        {/* Prédios do Aeroporto (Apenas HQ) */}
         {!simple && (
             <group position={[60, 0, 200]}>
                 <mesh position={[0, 15, 0]} castShadow>
@@ -189,7 +209,6 @@ const Runway = ({ simple = false }) => (
                 <mesh position={[0, 35, 0]} castShadow>
                      <cylinderGeometry args={[5, 5, 10, 8]} />
                      <meshStandardMaterial color="#b0bec5" />
-                     {/* Janelas da Torre */}
                      <meshStandardMaterial emissive="#81d4fa" emissiveIntensity={0.5} attach="material-1" />
                 </mesh>
                 <Text position={[0, 50, 0]} fontSize={10} color="white" anchorY="bottom">
@@ -200,15 +219,15 @@ const Runway = ({ simple = false }) => (
     </group>
 );
 
-const FlatIsland = ({ scale }: { scale: number }) => (
+const FlatIsland = ({ scale, grassTexture }: { scale: number, grassTexture: any }) => (
     <group>
         <mesh rotation={[-Math.PI/2, 0, 0]} receiveShadow>
             <cylinderGeometry args={[scale, scale + 20, 10, 7]} />
             <meshStandardMaterial color={COLORS.sand} />
         </mesh>
-        <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 5, 0]} receiveShadow>
+        <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 5.05, 0]} receiveShadow>
             <cylinderGeometry args={[scale * 0.8, scale * 0.9, 5, 7]} />
-            <meshStandardMaterial color={COLORS.grass} />
+            <meshStandardMaterial map={grassTexture} />
         </mesh>
         <Trees count={Math.floor(scale / 5)} area={scale * 0.6} offsetZ={0} />
     </group>
@@ -220,7 +239,6 @@ const VolcanicIsland = ({ scale }: { scale: number }) => (
              <cylinderGeometry args={[scale, scale + 30, 10, 8]} />
              <meshStandardMaterial color={COLORS.sand} />
         </mesh>
-        {/* Montanha Central */}
         <Mountain scale={scale * 2} position={[0, 0, 0]} />
     </group>
 );
@@ -229,18 +247,22 @@ const Mountain = ({ scale, position }: { scale: number, position: any }) => (
     <group position={position}>
         <mesh position={[0, scale/2, 0]} castShadow>
             <coneGeometry args={[scale * 0.8, scale, 5]} />
-            <meshStandardMaterial color={COLORS.rock} flatShading />
+            <meshStandardMaterial color={COLORS.rock} flatShading roughness={0.9} />
         </mesh>
-        {/* Pico de Neve */}
         <mesh position={[0, scale * 0.8, 0]}>
             <coneGeometry args={[scale * 0.25, scale * 0.4, 5]} />
-            <meshStandardMaterial color={COLORS.snow} />
+            <meshStandardMaterial 
+                color={COLORS.snow} 
+                roughness={0.1} 
+                metalness={0.1} 
+                polygonOffset={true}
+                polygonOffsetFactor={-1}
+            />
         </mesh>
     </group>
 );
 
 const Trees = ({ count, area, offsetZ }: { count: number, area: number, offsetZ: number }) => {
-    // Usando instanciamento simples visual (poderia ser Instances para performance extrema, mas map é ok pra <500)
     const trees = useMemo(() => {
         return new Array(count).fill(0).map(() => ({
             x: (Math.random() - 0.5) * area,
@@ -259,11 +281,11 @@ const Trees = ({ count, area, offsetZ }: { count: number, area: number, offsetZ:
                     </mesh>
                     <mesh position={[0, 5, 0]} castShadow>
                         <coneGeometry args={[2.5, 6, 5]} />
-                        <meshStandardMaterial color="#2e7d32" />
+                        <meshStandardMaterial color="#2e7d32" roughness={0.8} />
                     </mesh>
                     <mesh position={[0, 7, 0]} castShadow>
                         <coneGeometry args={[2, 5, 5]} />
-                        <meshStandardMaterial color="#388e3c" />
+                        <meshStandardMaterial color="#43a047" roughness={0.8} />
                     </mesh>
                 </group>
             ))}
@@ -289,12 +311,11 @@ const Cloud = ({ position, scale }: any) => (
 );
 
 const CityCenter = () => {
-    // Gerar um grid de prédios
     const buildings = useMemo(() => {
         const b = [];
         for(let x = -3; x <= 3; x++) {
             for(let z = -3; z <= 3; z++) {
-                if (Math.abs(x) < 1 && Math.abs(z) < 1) continue; // Centro vazio
+                if (Math.abs(x) < 1 && Math.abs(z) < 1) continue;
                 const height = 50 + Math.random() * 150;
                 b.push({ 
                     x: x * 80 + (Math.random()-0.5)*20, 
@@ -313,9 +334,8 @@ const CityCenter = () => {
                 <group key={i} position={[b.x, b.h/2, b.z]}>
                      <mesh castShadow receiveShadow>
                          <boxGeometry args={[40, b.h, 40]} />
-                         <meshStandardMaterial color={b.color} />
+                         <meshStandardMaterial color={b.color} roughness={0.2} metalness={0.5} />
                      </mesh>
-                     {/* Janelas Acesas Aleatórias */}
                      {[...Array(5)].map((_, j) => (
                          <mesh key={j} position={[
                              (Math.random()-0.5)*41, 
@@ -323,7 +343,13 @@ const CityCenter = () => {
                              (Math.random()-0.5)*41
                          ]}>
                              <boxGeometry args={[2, 2, 2]} />
-                             <meshStandardMaterial color="#ffeb3b" emissive="#ffeb3b" emissiveIntensity={1} />
+                             <meshStandardMaterial 
+                                color="#ffeb3b" 
+                                emissive="#ffeb3b" 
+                                emissiveIntensity={2}
+                                polygonOffset={true}
+                                polygonOffsetFactor={-2}
+                             />
                          </mesh>
                      ))}
                 </group>
@@ -333,7 +359,6 @@ const CityCenter = () => {
 }
 
 const GlowingRing = ({ color }: { color: string }) => {
-    const ref = React.useRef<any>();
     const [scale, setScale] = React.useState(1);
     
     React.useEffect(() => {
